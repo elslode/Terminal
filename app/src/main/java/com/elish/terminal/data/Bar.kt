@@ -7,10 +7,10 @@ import java.util.Date
 
 @Immutable
 data class Bar(
-   @SerializedName("o") val open: Double,
-   @SerializedName("c") val close: Double,
-   @SerializedName("h") val high: Double,
-   @SerializedName("l") val low: Double,
+   @SerializedName("o") val open: Float,
+   @SerializedName("c") val close: Float,
+   @SerializedName("h") val high: Float,
+   @SerializedName("l") val low: Float,
    @SerializedName("t") val time: Long
 ) {
     val calendar: Calendar

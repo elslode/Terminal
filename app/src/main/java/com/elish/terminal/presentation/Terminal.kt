@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.onSizeChanged
 import com.elish.terminal.data.Bar
 import kotlin.math.roundToInt
 
@@ -22,29 +23,20 @@ private const val MIN_VISIBLE_BARS_COUNT = 20
 @Composable
 fun Terminal(bars: List<Bar>) {
 
-    var visibleBarCount by remember {
-        mutableStateOf(100)
-    }
-
-    var barWidth by remember {
-        mutableStateOf(0f)
-    }
-
-    var scrolledBar by remember {
-        mutableStateOf(0f)
-    }
-
-    var terminalWidth by remember {
-        mutableStateOf(0f)
-    }
+    var terminalState by rememberTerminalState(bars)
 
     val transformableState = TransformableState { zoomChange, panChange, _ ->
-        visibleBarCount = (visibleBarCount / zoomChange).roundToInt()
+        val visibleBarCount = (terminalState.visibleBarsCount / zoomChange).roundToInt()
             .coerceIn(MIN_VISIBLE_BARS_COUNT, bars.size)
 
-        scrolledBar = (scrolledBar + panChange.x)
+        val scrolledBy = (terminalState.scrolledBy + panChange.x)
             .coerceAtLeast(0f)
-            .coerceAtMost(bars.size * barWidth - terminalWidth)
+            .coerceAtMost(bars.size * terminalState.barWidth - terminalState.terminalWidth)
+
+        terminalState = terminalState.copy(
+            visibleBarsCount = visibleBarCount,
+            scrolledBy = scrolledBy
+        )
     }
 
     Canvas(
@@ -52,22 +44,21 @@ fun Terminal(bars: List<Bar>) {
             .fillMaxSize()
             .background(Color.Black)
             .transformable(transformableState)
+            .onSizeChanged {
+                terminalState = terminalState.copy(terminalWidth = it.width.toFloat())
+            }
     ) {
-        terminalWidth = size.width
         //ищем максимальную точку из всех максимальных значений
-        val max = bars.maxOf { it.high }
+        val max = terminalState.visibleBars.maxOf { it.high }
         //ищем минимальную точку из всех минимальных значений
-        val min = bars.minOf { it.low }
-
-        //вычисляем ширину свечи относительно экрана
-        barWidth = size.width / visibleBarCount
+        val min = terminalState.visibleBars.minOf { it.low }
 
         //количество пикселей на один пункт
         val pxPerPoint = size.height / (max - min)
 
-        translate(left = scrolledBar) {
+        translate(left = terminalState.scrolledBy) {
             bars.forEachIndexed { index, bar ->
-                val offsetX = size.width - (index * barWidth)
+                val offsetX = size.width - (index * terminalState.barWidth)
                 drawLine(
                     color = Color.White,
                     start = Offset(offsetX, size.height - ((bar.low - min) * pxPerPoint)),
@@ -78,7 +69,7 @@ fun Terminal(bars: List<Bar>) {
                     color = if (bar.open < bar.close) Color.Green else Color.Red,
                     start = Offset(offsetX, size.height - ((bar.open - min) * pxPerPoint)),
                     end = Offset(offsetX, size.height - ((bar.close - min) * pxPerPoint)),
-                    strokeWidth = barWidth / 2
+                    strokeWidth = terminalState.barWidth / 2
                 )
             }
         }

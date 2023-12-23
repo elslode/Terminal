@@ -2,7 +2,7 @@ package com.elish.terminal.presentation
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.TransformableState
+import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -28,44 +29,77 @@ import kotlin.math.roundToInt
 
 private const val MIN_VISIBLE_BARS_COUNT = 20
 
-@OptIn(ExperimentalTextApi::class)
 @Composable
-fun Terminal(bars: List<Bar>) {
+fun Terminal(
+    modifier: Modifier,
+    bars: List<Bar>
+) {
 
     var terminalState by rememberTerminalState(bars)
-    val textMeasurer = rememberTextMeasurer()
 
-    val transformableState = TransformableState { zoomChange, panChange, _ ->
+    Chart(
+        modifier = modifier,
+        terminalState = terminalState,
+    ) {
+        terminalState = it
+    }
+
+    bars.firstOrNull()?.let {
+        Prices(
+            modifier = modifier,
+            max = terminalState.max,
+            min = terminalState.min,
+            lastPrice = it.close,
+            pxPerPoint = terminalState.pxPerPoint
+        )
+    }
+}
+
+@Composable
+private fun Chart(
+    modifier: Modifier = Modifier,
+    terminalState: TerminalState,
+    onTerminalStateChange: (TerminalState) -> Unit
+) {
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         val visibleBarsCount = (terminalState.visibleBarsCount / zoomChange).roundToInt()
-            .coerceIn(MIN_VISIBLE_BARS_COUNT, bars.size)
+            .coerceIn(MIN_VISIBLE_BARS_COUNT, terminalState.bars.size)
 
         val scrolledBy = (terminalState.scrolledBy + panChange.x)
             .coerceAtLeast(0f)
-            .coerceAtMost(bars.size * terminalState.barWidth - terminalState.terminalWidth)
+            .coerceAtMost(terminalState.bars.size * terminalState.barWidth - terminalState.terminalWidth)
 
-        terminalState = terminalState.copy(
-            visibleBarsCount = visibleBarsCount,
-            scrolledBy = scrolledBy
+        onTerminalStateChange(
+            terminalState.copy(
+                visibleBarsCount = visibleBarsCount,
+                scrolledBy = scrolledBy
+            )
         )
     }
 
     Canvas(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .clipToBounds()
             .padding(
                 vertical = 32.dp
             )
             .transformable(transformableState)
             .onSizeChanged {
-                terminalState = terminalState.copy(terminalWidth = it.width.toFloat())
+                onTerminalStateChange(
+                    terminalState.copy(
+                        terminalWidth = it.width.toFloat(),
+                        terminalHight = it.height.toFloat()
+                    )
+                )
             }
     ) {
-        val max = terminalState.visibleBars.maxOf { it.high }
-        val min = terminalState.visibleBars.minOf { it.low }
-        val pxPerPoint = size.height / (max - min)
+        val min = terminalState.min
+        val pxPerPoint = terminalState.pxPerPoint
+
         translate(left = terminalState.scrolledBy) {
-            bars.forEachIndexed { index, bar ->
+            terminalState.bars.forEachIndexed { index, bar ->
                 val offsetX = size.width - index * terminalState.barWidth
                 drawLine(
                     color = Color.White,
@@ -81,62 +115,7 @@ fun Terminal(bars: List<Bar>) {
                 )
             }
         }
-        bars.firstOrNull()?.let {
-            drawPrice(
-                max = max,
-                min = min,
-                pxPerPoint = pxPerPoint,
-                lastPrice = it.close,
-                textMeasurer = textMeasurer
-            )
-        }
     }
-}
-
-@OptIn(ExperimentalTextApi::class)
-private fun DrawScope.drawPrice(
-    max: Float,
-    lastPrice: Float,
-    min: Float,
-    pxPerPoint: Float,
-    textMeasurer: TextMeasurer
-) {
-
-    //max price
-    val  maxPriceOffsetY = 0f
-    drawDashedLine(
-        start = Offset(0f, maxPriceOffsetY),
-        end = Offset(size.width, maxPriceOffsetY)
-    )
-    drawTextPrice(
-        textMeasurer = textMeasurer,
-        price = max,
-        offsetY = maxPriceOffsetY
-    )
-
-    //last price
-    val lastPriceOffsetY = size.height - (lastPrice - min) * pxPerPoint
-    drawDashedLine(
-        start = Offset(0f, lastPriceOffsetY),
-        end = Offset(size.width, lastPriceOffsetY),
-    )
-    drawTextPrice(
-        textMeasurer = textMeasurer,
-        price = lastPrice,
-        offsetY = lastPriceOffsetY
-    )
-
-    //min price
-    val minPriceOffsetY = size.height
-    drawDashedLine(
-        start = Offset(0f, size.height),
-        end = Offset(size.width, size.height),
-    )
-    drawTextPrice(
-        textMeasurer = textMeasurer,
-        price = min,
-        offsetY = minPriceOffsetY
-    )
 }
 
 private fun DrawScope.drawDashedLine(
@@ -159,6 +138,34 @@ private fun DrawScope.drawDashedLine(
 }
 
 @OptIn(ExperimentalTextApi::class)
+@Composable
+private fun Prices(
+    modifier: Modifier = Modifier,
+    max: Float,
+    min: Float,
+    lastPrice: Float,
+    pxPerPoint: Float,
+) {
+
+    val textMeasurer = rememberTextMeasurer()
+
+    Canvas(
+        modifier = modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .padding(vertical = 32.dp)
+    ) {
+        drawPrice(
+            max = max,
+            min = min,
+            lastPrice = lastPrice,
+            textMeasurer = textMeasurer,
+            pxPerPoint = pxPerPoint
+        )
+    }
+}
+
+@OptIn(ExperimentalTextApi::class)
 private fun DrawScope.drawTextPrice(
     price: Float,
     offsetY: Float,
@@ -169,11 +176,57 @@ private fun DrawScope.drawTextPrice(
         style = TextStyle(
             color = Color.White,
             fontSize = 12.sp
-        )
+        ),
     )
 
     drawText(
         textLayoutResult = textLayoutResult,
-        topLeft = Offset(size.width - textLayoutResult.size.width, offsetY)
+        topLeft = Offset(size.width - textLayoutResult.size.width - 4.dp.toPx(), offsetY)
+    )
+}
+
+@OptIn(ExperimentalTextApi::class)
+private fun DrawScope.drawPrice(
+    max: Float,
+    lastPrice: Float,
+    min: Float,
+    pxPerPoint: Float,
+    textMeasurer: TextMeasurer
+) {
+
+    //max price
+    val maxPriceOffsetY = 0f
+    drawDashedLine(
+        start = Offset(0f, maxPriceOffsetY),
+        end = Offset(size.width, maxPriceOffsetY)
+    )
+    drawTextPrice(
+        price = max,
+        offsetY = maxPriceOffsetY,
+        textMeasurer = textMeasurer
+    )
+
+    //last price
+    val lastPriceOffsetY = size.height - (lastPrice - min) * pxPerPoint
+    drawDashedLine(
+        start = Offset(0f, lastPriceOffsetY),
+        end = Offset(size.width, lastPriceOffsetY),
+    )
+    drawTextPrice(
+        price = lastPrice,
+        offsetY = lastPriceOffsetY,
+        textMeasurer = textMeasurer
+    )
+
+    //min price
+    val minPriceOffsetY = size.height
+    drawDashedLine(
+        start = Offset(0f, size.height),
+        end = Offset(size.width, size.height),
+    )
+    drawTextPrice(
+        price = min,
+        offsetY = minPriceOffsetY,
+        textMeasurer = textMeasurer
     )
 }

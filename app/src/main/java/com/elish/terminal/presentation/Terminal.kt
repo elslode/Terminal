@@ -36,7 +36,7 @@ fun Terminal(bars: List<Bar>) {
     val textMeasurer = rememberTextMeasurer()
 
     val transformableState = TransformableState { zoomChange, panChange, _ ->
-        val visibleBarCount = (terminalState.visibleBarsCount / zoomChange).roundToInt()
+        val visibleBarsCount = (terminalState.visibleBarsCount / zoomChange).roundToInt()
             .coerceIn(MIN_VISIBLE_BARS_COUNT, bars.size)
 
         val scrolledBy = (terminalState.scrolledBy + panChange.x)
@@ -44,7 +44,7 @@ fun Terminal(bars: List<Bar>) {
             .coerceAtMost(bars.size * terminalState.barWidth - terminalState.terminalWidth)
 
         terminalState = terminalState.copy(
-            visibleBarsCount = visibleBarCount,
+            visibleBarsCount = visibleBarsCount,
             scrolledBy = scrolledBy
         )
     }
@@ -61,17 +61,12 @@ fun Terminal(bars: List<Bar>) {
                 terminalState = terminalState.copy(terminalWidth = it.width.toFloat())
             }
     ) {
-        //ищем максимальную точку из всех максимальных значений
         val max = terminalState.visibleBars.maxOf { it.high }
-        //ищем минимальную точку из всех минимальных значений
         val min = terminalState.visibleBars.minOf { it.low }
-
-        //количество пикселей на один пункт
         val pxPerPoint = size.height / (max - min)
-
         translate(left = terminalState.scrolledBy) {
             bars.forEachIndexed { index, bar ->
-                val offsetX = size.width - (index * terminalState.barWidth)
+                val offsetX = size.width - index * terminalState.barWidth
                 drawLine(
                     color = Color.White,
                     start = Offset(offsetX, size.height - ((bar.low - min) * pxPerPoint)),
@@ -85,15 +80,15 @@ fun Terminal(bars: List<Bar>) {
                     strokeWidth = terminalState.barWidth / 2
                 )
             }
-            bars.firstOrNull()?.let {
-                drawPrice(
-                    max = max,
-                    lastPrice = it.close,
-                    min = min,
-                    pxPerPoint = pxPerPoint,
-                    textMeasurer = textMeasurer,
-                )
-            }
+        }
+        bars.firstOrNull()?.let {
+            drawPrice(
+                max = max,
+                min = min,
+                pxPerPoint = pxPerPoint,
+                lastPrice = it.close,
+                textMeasurer = textMeasurer
+            )
         }
     }
 }
@@ -108,14 +103,15 @@ private fun DrawScope.drawPrice(
 ) {
 
     //max price
+    val  maxPriceOffsetY = 0f
     drawDashedLine(
-        start = Offset(0f, 0f),
-        end = Offset(size.width, 0f)
+        start = Offset(0f, maxPriceOffsetY),
+        end = Offset(size.width, maxPriceOffsetY)
     )
     drawTextPrice(
         textMeasurer = textMeasurer,
         price = max,
-        offsetY = 0f
+        offsetY = maxPriceOffsetY
     )
 
     //last price
